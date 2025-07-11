@@ -72,6 +72,8 @@ const blockHitSound = document.getElementById('blockHitSound');
 const stageClearSound = document.getElementById('stageClearSound');
 const shootSound = document.getElementById('shootSound');
 const bombDropSound = document.getElementById('bombDropSound'); // 新しいサウンド
+const bossBeamChargeSound = document.getElementById('bossBeamChargeSound'); // ビームチャージ音
+const bossBeamFireSound = document.getElementById('bossBeamFireSound');     // ビーム発射音
 
 function playSound(audioElement) {
     if (audioElement) {
@@ -121,6 +123,9 @@ const assets = {
     backgroundStage2: { img: new Image(), src: 'assets/images/background_stage2.png' }, // Stage 4 BGM
     shootItem: { img: new Image(), src: 'assets/images/shoot_item.png' },
     playerProjectile: { img: new Image(), src: 'assets/images/player_projectile.png' },
+    // 新しいボスビーム関連のアセット (仮の画像パス)
+    bossBeamCharge: { img: new Image(), src: 'assets/images/boss_beam_charge.png' }, // チャージエフェクト画像
+    bossBeam: { img: new Image(), src: 'assets/images/boss_beam.png' },               // ビーム画像
 };
 
 let assetsLoadedCount = 0;
@@ -534,6 +539,18 @@ class BossEnemy extends Enemy {
         this.invincibleDuration = 3000; // 3秒
         this.blinkTimer = 0;
         this.blinkInterval = 50;
+
+        // ビーム攻撃関連 (新規追加)
+        this.isChargingBeam = false;
+        this.beamChargeTimer = 0;
+        this.beamFireTimer = 0;
+        this.beamCooldown = 0;
+        this.maxBeamCooldown = 7000; // 7秒ごと (攻撃後)
+        this.currentBeam = null; // 現在発射されているビーム
+        this.BOSS_BEAM_CHARGE_DURATION = 3000; // 3秒チャージ
+        this.BOSS_BEAM_FIRE_DURATION = 1000; // 1秒発射
+        this.targetPlayerX = 0; // ビームを狙うプレイヤーのX座標
+        this.targetPlayerY = 0; // ビームを狙うプレイヤーのY座標
     }
 
     draw() {
@@ -542,6 +559,24 @@ class BossEnemy extends Enemy {
             return; // 点滅のために描画をスキップ
         }
         super.draw();
+
+        // ビームチャージエフェクトの描画 (仮の赤い円)
+        if (this.isChargingBeam) {
+            const chargeRadius = 20 + (1 - this.beamChargeTimer / this.BOSS_BEAM_CHARGE_DURATION) * 50;
+            ctx.fillStyle = `rgba(255, 0, 0, ${0.5 + (1 - this.beamChargeTimer / this.BOSS_BEAM_CHARGE_DURATION) * 0.5})`;
+            ctx.beginPath();
+            ctx.arc(this.x + this.width / 2, this.y + this.height / 2, chargeRadius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // チャージ中のプレイヤーのX座標をターゲットとして表示 (デバッグ用、最終的には削除または調整)
+            ctx.fillStyle = 'rgba(0, 255, 255, 0.5)';
+            ctx.fillRect(this.targetPlayerX - 5, this.targetPlayerY - 5, 10, 10);
+        }
+
+        // ビームの描画
+        if (this.currentBeam && this.currentBeam.active) {
+            this.currentBeam.draw();
+        }
     }
 
     update(deltaTime) {
@@ -563,7 +598,30 @@ class BossEnemy extends Enemy {
             }
         }
         
-        // 水平移動
+        // ビーム攻撃のロジック
+        if (this.isChargingBeam) {
+            this.beamChargeTimer -= deltaTime;
+            if (this.beamChargeTimer <= 0) {
+                this.isChargingBeam = false;
+                this.fireBeam();
+                this.beamFireTimer = this.BOSS_BEAM_FIRE_DURATION;
+                this.beamCooldown = this.maxBeamCooldown; // 発射後クールダウン開始
+            }
+        } else if (this.currentBeam && this.currentBeam.active) {
+            this.currentBeam.update(deltaTime);
+            this.beamFireTimer -= deltaTime;
+            if (this.beamFireTimer <= 0) {
+                this.deactivateBeam();
+            }
+        } else {
+            this.beamCooldown -= deltaTime;
+            if (this.beamCooldown <= 0) {
+                this.startBeamCharge(); // クールダウン終了後、チャージ開始
+                this.beamCooldown = this.maxBeamCooldown; // 次のクールダウンをセット (チャージ開始時)
+            }
+        }
+
+        // 水平移動 (ビームチャージ中でも移動は継続)
         this.x += this.moveDirection * this.bossSpeed * deltaTime / 1000;
 
         // 境界チェックと方向転換
@@ -588,9 +646,9 @@ class BossEnemy extends Enemy {
                 this.isJumping = false;
             }
         } else {
-            // ジャンプクールダウン
+            // ジャンプクールダウン (ビームチャージ中もジャンプは可能にするか考慮)
             this.jumpCooldown -= deltaTime;
-            if (this.jumpCooldown <= 0) {
+            if (this.jumpCooldown <= 0 && !this.isChargingBeam) { // チャージ中はジャンプしない
                 this.startJump();
                 this.jumpCooldown = this.maxJumpCooldown; // 次のジャンプまでのクールダウンをリセット
             }
@@ -617,6 +675,31 @@ class BossEnemy extends Enemy {
         if (this.hitPoints <= 0) {
             this.isDefeated = true;
             this.active = false; // activeをfalseにしてenemies配列から除外されるようにする
+        }
+    }
+
+    // ビーム攻撃関連のメソッド (新規追加)
+    startBeamCharge() {
+        this.isChargingBeam = true;
+        this.beamChargeTimer = this.BOSS_BEAM_CHARGE_DURATION;
+        playSound(bossBeamChargeSound); // ビームチャージ音を再生
+        // プレイヤーの現在の位置をターゲットとして記録
+        this.targetPlayerX = player.x + player.width / 2;
+        this.targetPlayerY = player.y + player.height / 2;
+    }
+
+    fireBeam() {
+        // ビーム発射ロジック
+        const beamStartX = this.x + this.width / 2;
+        const beamStartY = this.y + this.height / 2;
+        this.currentBeam = new BossBeam(beamStartX, beamStartY, this.targetPlayerX, this.targetPlayerY, assets.bossBeam.img);
+        playSound(bossBeamFireSound); // ビーム発射音を再生
+    }
+
+    deactivateBeam() {
+        if (this.currentBeam) {
+            this.currentBeam.active = false;
+            this.currentBeam = null;
         }
     }
 }
@@ -674,6 +757,7 @@ function spawnBoss() {
 
 let projectiles = [];
 let bombs = []; // 爆弾の配列
+let bossBeams = []; // ボスビームの配列
 
 // ====================================================================
 // Projectile クラス
@@ -749,6 +833,89 @@ class Bomb {
         if (this.x + this.width < 0 || this.y > canvas.height + 50) { // 少し下まで行ってから非アクティブ
             this.active = false;
         }
+    }
+}
+
+// ====================================================================
+// BossBeam クラス (新規追加)
+// ====================================================================
+class BossBeam {
+    constructor(startX, startY, targetX, targetY, image) {
+        this.startX = startX;
+        this.startY = startY;
+        this.targetX = targetX;
+        this.targetY = targetY;
+        this.image = image;
+        this.active = true;
+        this.damage = 1; // ビームのダメージ
+        this.width = 20; // ビームの幅 (仮)
+    }
+
+    draw() {
+        if (!this.active) return;
+
+        // ビームの描画 (矩形または画像)
+        if (this.image.complete && this.image.naturalHeight !== 0) {
+            // ボスからターゲットへの直線を画像で描画する場合は、回転とスケールが必要になります。
+            // ここでは簡易的に、ボスからターゲットまでのY座標をカバーする垂直の矩形とします。
+            // 実際のビーム画像を想定する場合、画像のアスペクト比や向きを考慮する必要があります。
+            // または、シンプルなラインとして描画する
+            ctx.beginPath();
+            ctx.strokeStyle = 'rgba(0, 255, 255, 0.8)'; // 青緑色のビーム
+            ctx.lineWidth = this.width;
+            ctx.moveTo(this.startX, this.startY);
+            ctx.lineTo(this.targetX, this.targetY);
+            ctx.stroke();
+            ctx.closePath();
+        } else {
+            ctx.beginPath();
+            ctx.strokeStyle = 'cyan'; // Placeholder color
+            ctx.lineWidth = this.width;
+            ctx.moveTo(this.startX, this.startY);
+            ctx.lineTo(this.targetX, this.targetY);
+            ctx.stroke();
+            ctx.closePath();
+        }
+    }
+
+    update(deltaTime) {
+        // ビームは固定なので、通常はupdateで移動しません。
+        // ただし、ゲームがスクロールしている場合は、ボスからの相対位置を維持するためにスクロールします。
+        // ここではボスビームが生成された瞬間の位置に固定されるようにします。
+        // もしボスと共に移動させる場合は、startX, targetXをスクロール量に応じて更新する必要があります。
+        // currentStage === 4 のとき、backgroundScrollSpeed と gameSpeed に合わせてスクロールさせる
+        this.startX -= backgroundScrollSpeed * gameSpeed * deltaTime / 1000;
+        this.targetX -= backgroundScrollSpeed * gameSpeed * deltaTime / 1000;
+
+        if (this.startX + this.width < 0) {
+            this.active = false;
+        }
+    }
+
+    // ビームとオブジェクトの衝突判定 (矩形と線分の衝突判定は複雑なため、簡易的な近似を使用)
+    // ここではビームをプレイヤーのx座標に固定された細い矩形として近似します。
+    checkCollisionWithPlayer(playerObj) {
+        if (!this.active) return false;
+
+        // ビームがプレイヤーのX範囲内にあるか
+        const beamMinX = Math.min(this.startX, this.targetX) - this.width / 2;
+        const beamMaxX = Math.max(this.startX, this.targetX) + this.width / 2;
+
+        const playerMinX = playerObj.x;
+        const playerMaxX = playerObj.x + playerObj.width;
+
+        if (playerMaxX < beamMinX || playerMinX > beamMaxX) {
+            return false; // X軸で重なっていない
+        }
+
+        // ビームのY範囲（ボスからプレイヤーターゲットYまで）とプレイヤーのY範囲が重なるか
+        const beamMinY = Math.min(this.startY, this.targetY);
+        const beamMaxY = Math.max(this.startY, this.targetY);
+
+        const playerMinY = playerObj.y;
+        const playerMaxY = playerObj.y + playerObj.height;
+
+        return (playerMinY < beamMaxY && playerMaxY > beamMinY);
     }
 }
 
@@ -927,6 +1094,7 @@ function resetPlayerAndStageContent() {
     items = [];
     projectiles = [];
     bombs = [];
+    bossBeams = []; // ボスビームもリセット
     isStageClearItemSpawned = false;
 
     // ステージ4専用の変数をリセット
@@ -1313,6 +1481,13 @@ function gameLoop(currentTime) {
             }
         });
 
+        // ボスビームの更新と衝突判定 (新規追加)
+        if (bossEnemyInstance && bossEnemyInstance.currentBeam && bossEnemyInstance.currentBeam.active) {
+            if (bossEnemyInstance.currentBeam.checkCollisionWithPlayer(player)) {
+                player.takeDamage();
+            }
+        }
+
 
         blocks = blocks.filter(block => block.x + block.width > 0 && !(block instanceof BreakableBlock && block.isBroken && block.breakTimer <= 0));
         blocks.forEach(block => {
@@ -1391,6 +1566,11 @@ function gameLoop(currentTime) {
     bombs.forEach(bomb => bomb.draw());
     blocks.forEach(block => block.draw());
     items.forEach(item => item.draw());
+    // ボスビームの描画
+    if (bossEnemyInstance && bossEnemyInstance.currentBeam && bossEnemyInstance.currentBeam.active) {
+        bossEnemyInstance.currentBeam.draw();
+    }
+
 
     updateUI();
 
