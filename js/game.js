@@ -110,8 +110,8 @@ const assets = {
     playerJump: { img: new Image(), src: 'assets/images/player_jump.png' },
     enemy: { img: new Image(), src: 'assets/images/enemy.png' },
     flyingEnemy: { img: new Image(), src: 'assets/images/flying_enemy.png' },
-    groundEnemy2: { img: new Image(), src: 'assets/images/ground_enemy.png' },
-    stage2Enemy: { img: new Image(), src: 'assets/images/stage2_enemy.png' }, // ステージ2/4の敵、ボス画像
+    groundEnemy2: { img: new Image(), src: 'assets/images/ground_enemy.PNG' },
+    stage2Enemy: { img: new Image(), src: 'assets/images/stage2_enemy.PNG' }, // ステージ2/4の敵、ボス画像
     bombDropper: { img: new Image(), src: 'assets/images/bomb_dropper.png' },
     bomb: { img: new Image(), src: 'assets/images/bomb.png' }, // Bomb クラスで使用される画像
     block: { img: new Image(), src: 'assets/images/block.png' },
@@ -124,8 +124,8 @@ const assets = {
     shootItem: { img: new Image(), src: 'assets/images/shoot_item.png' },
     playerProjectile: { img: new Image(), src: 'assets/images/player_projectile.png' },
     // 新しいボスビーム関連のアセット (仮の画像パス)
-    bossBeamCharge: { img: new Image(), src: 'assets/images/boss_beam_charge.png' }, // チャージエフェクト画像
-    bossBeam: { img: new Image(), src: 'assets/images/boss_beam.png' },               // ビーム画像
+    bossBeamCharge: { img: new Image(), src: 'assets/images/IMG_0495.PNG' }, // チャージエフェクト画像
+    bossBeam: { img: new Image(), src: 'assets/images/boss_beam.PNG' },               // ビーム画像
 };
 
 let assetsLoadedCount = 0;
