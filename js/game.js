@@ -1510,7 +1510,7 @@ function gameLoop(currentTime) {
                         // 通常の敵を踏んだ
                         enemy.isStomped = true;
                         enemy.stompedTimer = enemy.stompedDuration;
-                        score += 10000;
+                        score += 100;
                         playSound(enemyHitSound);
                     }
                     player.velocityY = player.jumpStrength / 2;
