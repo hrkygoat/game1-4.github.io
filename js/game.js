@@ -618,11 +618,17 @@ class BossEnemy extends Enemy {
 
         // ビームチャージエフェクトの描画 (仮の赤い円)
         if (this.isChargingBeam) {
-            const chargeRadius = 20 + (1 - this.beamChargeTimer / this.BOSS_BEAM_CHARGE_DURATION) * 50;
-            ctx.fillStyle = `rgba(255, 0, 0, ${0.5 + (1 - this.beamChargeTimer / this.BOSS_BEAM_CHARGE_DURATION) * 0.5})`;
-            ctx.beginPath();
-            ctx.arc(this.x + this.width / 2, this.y + this.height / 2, chargeRadius, 0, Math.PI * 2);
-            ctx.fill();
+            const chargeImg = assets.bossBeamCharge.img;
+            if (chargeImg.complete && chargeImg.naturalHeight !== 0) {
+                // チャージ時間に応じて画像を脈動させる
+                const scale = 1.0 + Math.sin((1 - this.beamChargeTimer / this.BOSS_BEAM_CHARGE_DURATION) * Math.PI) * 0.5;
+                const drawWidth = chargeImg.width * scale;
+                const drawHeight = chargeImg.height * scale;
+                const drawX = this.x + (this.width - drawWidth) / 2;
+                const drawY = this.y + (this.height - drawHeight) / 2;
+                
+                ctx.drawImage(chargeImg, drawX, drawY, drawWidth, drawHeight);
+            }
 
             // チャージ中のプレイヤーのX座標をターゲットとして表示 (デバッグ用、最終的には削除または調整)
             ctx.fillStyle = 'rgba(0, 255, 255, 0.5)';
@@ -913,35 +919,39 @@ class BossBeam {
         this.image = image;
         this.active = true;
         this.damage = 1; // ビームのダメージ
-        this.width = 20; // ビームの幅 (仮)
+        this.width = 150; // ビームの幅 (仮)
     }
 
-    draw() {
-        if (!this.active) return;
+draw() {
+    if (!this.active) return;
 
-        // ビームの描画 (矩形または画像)
-        if (this.image.complete && this.image.naturalHeight !== 0) {
-            // ボスからターゲットへの直線を画像で描画する場合は、回転とスケールが必要になります。
-            // ここでは簡易的に、ボスからターゲットまでのY座標をカバーする垂直の矩形とします。
-            // 実際のビーム画像を想定する場合、画像のアスペクト比や向きを考慮する必要があります。
-            // または、シンプルなラインとして描画する
-            ctx.beginPath();
-            ctx.strokeStyle = 'rgba(0, 255, 255, 0.8)'; // 青緑色のビーム
-            ctx.lineWidth = this.width;
-            ctx.moveTo(this.startX, this.startY);
-            ctx.lineTo(this.targetX, this.targetY);
-            ctx.stroke();
-            ctx.closePath();
-        } else {
-            ctx.beginPath();
-            ctx.strokeStyle = 'cyan'; // Placeholder color
-            ctx.lineWidth = this.width;
-            ctx.moveTo(this.startX, this.startY);
-            ctx.lineTo(this.targetX, this.targetY);
-            ctx.stroke();
-            ctx.closePath();
-        }
+    const beamImg = this.image;
+    // 画像が読み込まれていれば画像を描画
+    if (beamImg.complete && beamImg.naturalHeight !== 0) {
+        // ビームの角度と長さを計算
+        const angle = Math.atan2(this.targetY - this.startY, this.targetX - this.startX);
+        const distance = Math.hypot(this.targetX - this.startX, this.targetY - this.startY);
+
+        ctx.save(); // 現在の描画状態を保存
+        ctx.translate(this.startX, this.startY); // 描画の基準点をビームの開始位置に移動
+        ctx.rotate(angle); // ビームの角度にキャンバスを回転
+
+        // 回転させた状態で、画像を横方向に引き伸ばして描画
+        // 画像の縦幅がビームの太さになる (this.width)
+        ctx.drawImage(beamImg, 0, -this.width / 2, distance, this.width);
+
+        ctx.restore(); // 描画状態を元に戻す
+    } else {
+        // 画像が未読み込みの場合の代替描画 (線を引く)
+        ctx.beginPath();
+        ctx.strokeStyle = 'cyan';
+        ctx.lineWidth = this.width;
+        ctx.moveTo(this.startX, this.startY);
+        ctx.lineTo(this.targetX, this.targetY);
+        ctx.stroke();
+        ctx.closePath();
     }
+}
 
     update(deltaTime) {
         // ビームは固定なので、通常はupdateで移動しません。
